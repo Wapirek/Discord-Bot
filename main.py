@@ -7,9 +7,11 @@ import aiohttp
 import time
 import youtube_dl
 from discord.ext import commands
+from dotenv import load_dotenv
 
+load_dotenv()
 
-# client = discord.Client()
+#client = discord.Client()
 bot = commands.Bot(command_prefix='!')
 
 players = {}
@@ -90,6 +92,5 @@ async def play(ctx, url : str):
     voice.play(discord.FFmpegPCMAudio("song.mp3"))
 
 
+bot.run(os.getenv('TOKEN'))
 
-
-bot.run('Njc0NzYwMjc2MzIyNTQ5NzYx.XjtReg.gAw3FcO8uqhMbAldvSTogeSw8QY')
