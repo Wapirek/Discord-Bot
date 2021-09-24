@@ -36,9 +36,9 @@ def dog_url():
     return (random_dog)
 
 
-# @bot.event
-# async def on_ready():
-#     print('online')
+@bot.event
+async def on_ready():
+    print('online')
 
 @bot.command()
 async def pet(ctx,who: discord.Member):
@@ -52,6 +52,7 @@ async def gif_reload(ctx):
     gif_update()
 
 @bot.command()
+@commands.cooldown(1,2.5)
 async def pjesek(ctx):
     print('pjesek requested')
     async with aiohttp.ClientSession() as session:
@@ -65,10 +66,24 @@ async def pjesek(ctx):
 async def pjeski(ctx):
     await pjesek(ctx)
 
+
 @bot.command()
-async def delete(ctx, arg):
-    #print(await ctx.channel.fetch_message(ctx.channel.last_message_id))
-    await ctx.channel.purge(limit=int(arg)+1)
+@commands.has_any_role('ogul sie', 'Dziadu ak Head Admin')
+async def delete(ctx,arg=None):
+    await ctx.channel.purge(limit=1)
+    if (arg != None):
+        await ctx.channel.purge(limit=int(arg))
+    else:
+        await ctx.channel.purge(limit=1)
+    await ctx.send('Usunięto!')
+    time.sleep(1)
+    await ctx.channel.purge(limit=1)
+
+
+@bot.command()
+async def pisz(ctx):
+    for a in range(5):
+        await ctx.send(a)
 
 @bot.command()
 async def test(ctx):
