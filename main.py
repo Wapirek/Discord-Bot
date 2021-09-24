@@ -5,6 +5,7 @@ import requests
 import io
 import aiohttp
 import time
+import random
 import youtube_dl
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -12,9 +13,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #client = discord.Client()
-bot = commands.Bot(command_prefix="!")
+bot = commands.Bot(command_prefix="$")
+
+
 
 players = {}
+gifs = []
+
+def gif_update():
+    gifs.clear()
+    files = os.listdir('./gif')
+    for file in files:
+        gifs.append(file)
+        print(file)
 
 
 def dog_url():
@@ -30,6 +41,17 @@ def dog_url():
 #     print('online')
 
 @bot.command()
+async def pet(ctx,who: discord.Member):
+    gif_update()
+    await ctx.channel.purge(limit=1)
+    await ctx.send(str(ctx.author.mention) + " pet " +str(who.mention)+" :heart:")
+    await ctx.send(file=discord.File("gif/"+str(gifs[random.randint(0,len(gifs)-1)])))
+
+@bot.command()
+async def gif_reload(ctx):
+    gif_update()
+
+@bot.command()
 async def pjesek(ctx):
     print('pjesek requested')
     async with aiohttp.ClientSession() as session:
@@ -41,13 +63,7 @@ async def pjesek(ctx):
 
 @bot.command()
 async def pjeski(ctx):
-    print('pjesek requested')
-    async with aiohttp.ClientSession() as session:
-        async with session.get(dog_url()) as resp:
-            if resp.status != 200:
-                return await ctx.send('Could not download file...')
-            data = io.BytesIO(await resp.read())
-            await ctx.send(file=discord.File(data, 'dog.png'))
+    await pjesek(ctx)
 
 @bot.command()
 async def delete(ctx, arg):
