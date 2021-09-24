@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #client = discord.Client()
-bot = commands.Bot(command_prefix="$")
+bot = commands.Bot(command_prefix="!")
 
 
 
