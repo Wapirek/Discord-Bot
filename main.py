@@ -1,3 +1,4 @@
+import asyncio
 import os
 import discord
 import json
@@ -12,13 +13,52 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-#client = discord.Client()
+client = discord.Client()
 bot = commands.Bot(command_prefix="!")
-
-
 
 players = {}
 gifs = []
+queue = {}
+
+youtube_dl.utils.bug_reports_message = lambda: ''
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0'  # bind to ipv4 since ipv6 addresses cause issues sometimes
+}
+ffmpeg_options = {
+    'options': '-vn'
+}
+
+ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+
+
+class YTDLSource(discord.PCMVolumeTransformer):
+    def __init__(self, source, *, data, volume=0.5):
+        super().__init__(source, volume)
+        self.data = data
+        self.title = data.get('title')
+        self.url = data.get('url')
+
+    @classmethod
+    async def from_url(cls, url, *, loop=None, stream=False):
+        loop = loop or asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
+
+        filename = data['url'] if stream else ytdl.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+
 
 def gif_update():
     gifs.clear()
@@ -32,7 +72,7 @@ def dog_url():
     response = requests.get("https://dog.ceo/api/breeds/image/random")
     json_dog = json.loads(response.text)
     random_dog = json_dog['message']
-    #status = json_dog['status']
+    # status = json_dog['status']
     return (random_dog)
 
 
@@ -40,19 +80,22 @@ def dog_url():
 async def on_ready():
     print('online')
 
+
 @bot.command()
-async def pet(ctx,who: discord.Member):
+async def pet(ctx, who: discord.Member):
     gif_update()
     await ctx.channel.purge(limit=1)
-    await ctx.send(str(ctx.author.mention) + " pet " +str(who.mention)+" :heart:")
-    await ctx.send(file=discord.File("gif/"+str(gifs[random.randint(0,len(gifs)-1)])))
+    await ctx.send(str(ctx.author.mention) + " pet " + str(who.mention) + " :heart:")
+    await ctx.send(file=discord.File("gif/" + str(gifs[random.randint(0, len(gifs) - 1)])))
+
 
 @bot.command()
 async def gif_reload(ctx):
     gif_update()
 
+
 @bot.command()
-@commands.cooldown(1,2.5)
+@commands.cooldown(1, 2.5)
 async def pjesek(ctx):
     print('pjesek requested')
     async with aiohttp.ClientSession() as session:
@@ -62,6 +105,7 @@ async def pjesek(ctx):
             data = io.BytesIO(await resp.read())
             await ctx.send(file=discord.File(data, 'dog.png'))
 
+
 @bot.command()
 async def pjeski(ctx):
     await pjesek(ctx)
@@ -69,9 +113,9 @@ async def pjeski(ctx):
 
 @bot.command()
 @commands.has_any_role('ogul sie', 'Dziadu ak Head Admin')
-async def delete(ctx,arg=None):
+async def delete(ctx, arg=None):
     await ctx.channel.purge(limit=1)
-    if (arg != None):
+    if arg:
         await ctx.channel.purge(limit=int(arg))
     else:
         await ctx.channel.purge(limit=1)
@@ -85,45 +129,105 @@ async def pisz(ctx):
     for a in range(5):
         await ctx.send(a)
 
+
 @bot.command()
 async def test(ctx):
     print("xd")
-    await ctx.send('TEST!!!')
+    print(ctx.message.author)
+
 
 @bot.command()
 async def join(ctx):
-    channel = ctx.author.voice.channel
+    if not ctx.message.author.voice:
+        await ctx.send("{} is not connected to a voice channel!".format(ctx.message.author.mention))
+        return
+    else:
+        channel = ctx.author.voice.channel
+        await ctx.send(f'Connected to ``{channel}``')
+
     await channel.connect()
+
+@bot.command()
+async def leave(ctx):
+    print(ctx.voice_client)
+    if ctx.voice_client:  # If the bot is in a voice channel
+        await ctx.guild.voice_client.disconnect()  # Leave the channel
+    else:
+        await ctx.send("The bot is not connected to a voice channel.")
 
 
 @bot.command()
-async def play(ctx, url : str):
-    song_there = os.path.isfile("song.mp3")
+async def play(ctx, *, url):
     try:
-        if song_there:
-            os.remove("song.mp3")
-    except PermissionError:
-        await ctx.send("Wait for the current playing music to end or use the 'stop' command")
-        return
+        if not ctx.voice_client:
+            await join(ctx)
+        async with ctx.typing():
+            filename = await YTDLSource.from_url(url, loop=bot.loop)
+            print(queue)
 
-    voiceChannel = discord.utils.get(ctx.guild.voice_channels, name='Grańsko')
-    await voiceChannel.connect()
-    voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+            if len(queue) == 0:
+                print('len == 0')
+                start_playing(ctx.voice_client, filename)
+                await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Now '
+                                                                           'Playing:** ``{}'.format(filename.title) + "``")
+            else:
+                print('len else')
+                queue[len(queue)] = filename
+                await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Added'
+                                                                           ' to queue:** ``{}'.format(filename.title) + "``")
 
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-    }
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    for file in os.listdir("../Discord - Tonari/"):
-        if file.endswith(".mp3"):
-            os.rename(file, "song.mp3")
-    voice.play(discord.FFmpegPCMAudio("song.mp3"))
+    except discord.errors.ClientException:
+        await ctx.send("The bot is already playing audio...")
+
+#todo queue naprawić bo nie działa
+
+def start_playing(voice_client, filename):
+    print(filename)
+    queue[0] = filename
+
+    i = 0
+    while i < len(queue):
+        try:
+            voice_client.play(queue[i], after=lambda e: print('error: %s' % e) if e else None)
+        except:
+            pass
+        i += 1
+
+
+@bot.command()
+async def q(ctx):
+    await ctx.send(queue)
+
+
+@bot.command()
+async def ffff(ctx):
+    await ctx.message.guild.voice_client.play
+
+
+@bot.command()
+async def stop(ctx):
+    ctx.voice_client.stop()
+
+
+@bot.command()
+async def pause(ctx):
+    voice = ctx.voice_client
+    if voice.is_playing():
+        voice.pause()
+        user = ctx.message.author.mention
+        await ctx.send(f"Bot was paused by {user}")
+    else:
+        await ctx.send("Currently no audio is playing.")
+
+
+@bot.command()
+async def resume(ctx):
+    voice = ctx.voice_client
+    if voice.is_paused():
+        voice.resume()
+        user = ctx.message.author.mention
+        await ctx.send(f"Bot was resumed by {user}")
+    else:
+        await ctx.send("The audio is not paused.")
 
 bot.run(os.getenv('TOKEN'))
-
