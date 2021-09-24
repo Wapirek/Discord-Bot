@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #client = discord.Client()
-bot = commands.Bot(command_prefix='!')
+bot = commands.Bot(command_prefix="!")
 
 players = {}
 
@@ -25,42 +25,45 @@ def dog_url():
     return (random_dog)
 
 
-@bot.event
-async def on_ready():
-    print('online')
+# @bot.event
+# async def on_ready():
+#     print('online')
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
+@bot.command()
+async def pjesek(ctx):
+    print('pjesek requested')
+    async with aiohttp.ClientSession() as session:
+        async with session.get(dog_url()) as resp:
+            if resp.status != 200:
+                return await ctx.send('Could not download file...')
+            data = io.BytesIO(await resp.read())
+            await ctx.send(file=discord.File(data, 'dog.png'))
 
-    if message.content.startswith('test'):
-        await message.channel.send('TEST!!!')
+@bot.command()
+async def pjeski(ctx):
+    print('pjesek requested')
+    async with aiohttp.ClientSession() as session:
+        async with session.get(dog_url()) as resp:
+            if resp.status != 200:
+                return await ctx.send('Could not download file...')
+            data = io.BytesIO(await resp.read())
+            await ctx.send(file=discord.File(data, 'dog.png'))
 
-    if message.content.startswith('!pjeski') or message.content.startswith('!pjesek'):
-        print('pjesek requested')
-        async with aiohttp.ClientSession() as session:
-            async with session.get(dog_url()) as resp:
-                if resp.status != 200:
-                    return await message.channel.send('Could not download file...')
-                data = io.BytesIO(await resp.read())
-                await message.channel.send(file=discord.File(data, 'dog.png'))
-
-    if message.content.startswith('!delete'):
-        await message.channel.purge(limit=1)
-        await message.channel.send('Usunięto!')
-        time.sleep(3)
-        await message.channel.purge(limit=1)
-
+@bot.command()
+async def delete(ctx, arg):
+    #print(await ctx.channel.fetch_message(ctx.channel.last_message_id))
+    await ctx.channel.purge(limit=int(arg)+1)
 
 @bot.command()
 async def test(ctx):
     print("xd")
-    await bot.user.channel.send('TEST!!!')
+    await ctx.send('TEST!!!')
+
 @bot.command()
 async def join(ctx):
     channel = ctx.author.voice.channel
     await channel.connect()
+
 
 @bot.command()
 async def play(ctx, url : str):
@@ -90,7 +93,6 @@ async def play(ctx, url : str):
         if file.endswith(".mp3"):
             os.rename(file, "song.mp3")
     voice.play(discord.FFmpegPCMAudio("song.mp3"))
-
 
 bot.run(os.getenv('TOKEN'))
 
