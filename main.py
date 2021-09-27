@@ -1,5 +1,6 @@
 import asyncio
 import os
+import datetime
 import discord
 import json
 import requests
@@ -10,20 +11,27 @@ import random
 import youtube_dl
 from discord.ext import commands
 from dotenv import load_dotenv
+from tinytag import TinyTag
+
+
 
 load_dotenv()
 
 client = discord.Client()
 bot = commands.Bot(command_prefix="!")
 
-players = {}
 gifs = []
-queue = {}
+queue = []
 
 youtube_dl.utils.bug_reports_message = lambda: ''
 ytdl_format_options = {
     'format': 'bestaudio/best',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    'outtmpl': '%(title)s.mp3',
     'restrictfilenames': True,
     'noplaylist': True,
     'nocheckcertificate': True,
@@ -39,6 +47,12 @@ ffmpeg_options = {
 }
 
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+
+
+class Song:
+    def __init__(self, filename):
+        self.filename = filename
+        self.time = datetime.timedelta(seconds=filename.data['duration'])
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -73,7 +87,7 @@ def dog_url():
     json_dog = json.loads(response.text)
     random_dog = json_dog['message']
     # status = json_dog['status']
-    return (random_dog)
+    return random_dog
 
 
 @bot.event
@@ -90,7 +104,7 @@ async def pet(ctx, who: discord.Member):
 
 
 @bot.command()
-async def gif_reload(ctx):
+async def gif_reload():
     gif_update()
 
 
@@ -132,20 +146,21 @@ async def pisz(ctx):
 
 @bot.command()
 async def test(ctx):
-    print("xd")
-    print(ctx.message.author)
+    embed_var = discord.Embed(title="Currently playing:", color=0x00ff00)
+    embed_var.add_field(name="1. Piosenka 1", value="_ _", inline=False)
+    embed_var.add_field(name="2. Piosenka 2", value="_ _", inline=False)
+    await ctx.send(embed=embed_var)
 
 
 @bot.command()
 async def join(ctx):
     if not ctx.message.author.voice:
-        await ctx.send("{} is not connected to a voice channel!".format(ctx.message.author.mention))
-        return
+        await ctx.send("{} u must join a voice channel first!".format(ctx.message.author.mention))
     else:
         channel = ctx.author.voice.channel
-        await ctx.send(f'Connected to ``{channel}``')
+        await ctx.send(f'Joining ``{channel}``')
+        await channel.connect()
 
-    await channel.connect()
 
 @bot.command()
 async def leave(ctx):
@@ -153,60 +168,77 @@ async def leave(ctx):
     if ctx.voice_client:  # If the bot is in a voice channel
         await ctx.guild.voice_client.disconnect()  # Leave the channel
     else:
-        await ctx.send("The bot is not connected to a voice channel.")
+        await ctx.send("Not currently in a channel.")
 
 
-@bot.command()
+@bot.command(pass_context=True)
 async def play(ctx, *, url):
     try:
         if not ctx.voice_client:
             await join(ctx)
         async with ctx.typing():
             filename = await YTDLSource.from_url(url, loop=bot.loop)
-            print(queue)
-
             if len(queue) == 0:
                 print('len == 0')
-                start_playing(ctx.voice_client, filename)
-                await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Now '
-                                                                           'Playing:** ``{}'.format(filename.title) + "``")
+                queue.append(Song(filename))
+                print(queue)
+                start_playing(ctx)
+                if url.startswith("https://") or url.startswith("http://"):
+                    await ctx.send(':musical_note: **Now Playing:** ``{}'.format(filename.title) + "``")
+                else:
+                    await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Now '
+                                                                               'Playing:** ``{}'.format(filename.title) + "``")
             else:
-                print('len else')
-                queue[len(queue)] = filename
-                await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Added'
-                                                                           ' to queue:** ``{}'.format(filename.title) + "``")
-
+                queue.append(Song(filename))
+                print(queue)
+                if url.startswith("https://") or url.startswith("http://"):
+                    await ctx.send(':musical_note: **Added to queue:** ``{}'.format(filename.title) + "``")
+                else:
+                    await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Added'
+                                                                               ' to queue:** ``{}'.format(filename.title) + "``")
     except discord.errors.ClientException:
-        await ctx.send("The bot is already playing audio...")
-
-#todo queue naprawić bo nie działa
-
-def start_playing(voice_client, filename):
-    print(filename)
-    queue[0] = filename
-
-    i = 0
-    while i < len(queue):
-        try:
-            voice_client.play(queue[i], after=lambda e: print('error: %s' % e) if e else None)
-        except:
-            pass
-        i += 1
+        pass
+    except discord.ext.commands.errors.MissingRequiredArgument:
+        await ctx.send("The player is not currently playing anything.\n"
+                       "Use ``!play <url-or-search-terms>`` to add a song.")
 
 
-@bot.command()
-async def q(ctx):
-    await ctx.send(queue)
+def start_playing(ctx):
+    print('poczatek grania')
+    player = ctx.voice_client
+
+    ctx.voice_client.play(queue[0].filename, after=lambda a: next_song(ctx))
 
 
-@bot.command()
-async def ffff(ctx):
-    await ctx.message.guild.voice_client.play
+def next_song(ctx):
+    if len(queue) > 1:
+        queue.pop(0)
+        start_playing(ctx)
+    else:
+        queue.pop(0)
+        ctx.voice_client.stop()
 
 
 @bot.command()
 async def stop(ctx):
-    ctx.voice_client.stop()
+    if not len(queue) == 0:
+        ctx.voice_client.stop()
+        await ctx.send("The queue has been emptied, ``{}`` tracks have been removed.".format(len(queue)))
+        queue.clear()
+    else:
+        await ctx.send("Not currently playing anything.")
+
+@bot.command()
+async def q(ctx):
+    if not queue:
+        await ctx.send('Not currently playing anything.')
+    else:
+        i = 1
+        embed_var = discord.Embed(title="Currently playing:", color=0x19a56f)
+        for song in queue:
+            embed_var.add_field(name=str(i) + '. ' + song.filename.title, value=song.time, inline=False)
+            i += 1
+        await ctx.send(embed=embed_var)
 
 
 @bot.command()
@@ -214,10 +246,26 @@ async def pause(ctx):
     voice = ctx.voice_client
     if voice.is_playing():
         voice.pause()
-        user = ctx.message.author.mention
-        await ctx.send(f"Bot was paused by {user}")
+        await ctx.send(f"The player is now paused. You can resume it with ``!resume``")
     else:
-        await ctx.send("Currently no audio is playing.")
+        await ctx.send("The player is not currently playing anything.\n"
+                       "Use ``!play <url-or-search-terms>`` to add a song.")
+
+
+@bot.command()
+async def skip(ctx):
+    ctx.voice_client.stop()
+    ctx.send("Skipped!")
+
+
+@bot.command()
+async def remove(ctx, id):
+    id = int(id) - 1
+    await ctx.send("`{}` has been removed from queue.".format(queue[id].filename.title))
+    if id == 0:
+        ctx.voice_client.stop()
+    else:
+        queue.pop(id)
 
 
 @bot.command()
@@ -225,9 +273,10 @@ async def resume(ctx):
     voice = ctx.voice_client
     if voice.is_paused():
         voice.resume()
-        user = ctx.message.author.mention
-        await ctx.send(f"Bot was resumed by {user}")
+        await ctx.send("The player is now unpaused.")
     else:
-        await ctx.send("The audio is not paused.")
+        await ctx.send("The player is not paused.")
+
+
 
 bot.run(os.getenv('TOKEN'))
