@@ -287,7 +287,7 @@ def waifu_url(tag, gif):
     if json_w['code'] == 404:
         random_w = 'error'
     else:
-        random_w = json_w['tags']['url']
+        random_w = json_w['tags'][0]['images'][0]['url']
     print(random_w)
     return random_w
 
