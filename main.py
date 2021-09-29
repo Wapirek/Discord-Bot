@@ -277,6 +277,8 @@ def waifu_url(tag, gif):
     typ = 'nsfw'
     if tag == 'maid' or tag == 'waifu' or tag == 'all':
         typ = 'sfw'
+    if tag == 'maid_nsfw':
+        tag = 'maid'
     response = requests.get(f"https://api.waifu.im/{typ}/{tag}/?gif={gif}")
     json_w = json.loads(response.text)
     print(json_w)
