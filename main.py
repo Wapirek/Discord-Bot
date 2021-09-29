@@ -11,8 +11,6 @@ import random
 import youtube_dl
 from discord.ext import commands
 from dotenv import load_dotenv
-from waifuim import WaifuAioClient
-from tinytag import TinyTag
 
 
 load_dotenv()
