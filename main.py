@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+extension = ''
+
 client = discord.Client()
 bot = commands.Bot(command_prefix="!")
 
@@ -282,6 +284,8 @@ def waifu_url(tag, gif):
         random_w = 'error'
     else:
         random_w = json_w['tags'][0]['images'][0]['url']
+        global extension
+        extension = json_w['tags'][0]['images'][0]['extension']
     print(random_w)
     return random_w
 
@@ -311,10 +315,7 @@ async def waifu(ctx, tag='waifu', gif=None):
             if resp.status != 200:
                 await ctx.send('Could not download file...')
             data = io.BytesIO(await resp.read())
-            if gif == 'True':
-                await ctx.send(file=discord.File(data, "waifu.gif"))
-            else:
-                await ctx.send(file=discord.File(data, "waifu.png"))
+            await ctx.send(file=discord.File(data, f"waifu{extension}"))
             print('send waifu')
 
 #todo hentai request api updated (not working now)
