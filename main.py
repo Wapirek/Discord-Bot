@@ -110,7 +110,7 @@ async def gif_reload():
     gif_update()
 
 
-@bot.command()
+@bot.command(aliases=['pjeski', 'pjes'])
 @commands.cooldown(1, 2.5)
 async def pjesek(ctx):
     print('pjesek requested')
@@ -120,11 +120,6 @@ async def pjesek(ctx):
                 return await ctx.send('Could not download file...')
             data = io.BytesIO(await resp.read())
             await ctx.send(file=discord.File(data, 'dog.png'))
-
-
-@bot.command()
-async def pjeski(ctx):
-    await pjesek(ctx)
 
 
 @bot.command()
@@ -172,7 +167,7 @@ async def leave(ctx):
         await ctx.send("Not currently in a channel.")
 
 
-@bot.command(pass_context=True)
+@bot.command(pass_context=True, aliases=['plya', 'p'])
 async def play(ctx, *, url):
     try:
         if not ctx.voice_client:
@@ -224,8 +219,9 @@ async def stop(ctx):
     else:
         await ctx.send("Not currently playing anything.")
 
+
 #todo queue zawijanie po 5 + menu reakcjowe
-@bot.command()
+@bot.command(aliases=['queue'])
 async def q(ctx):
     if not queue:
         await ctx.send('Not currently playing anything.')
