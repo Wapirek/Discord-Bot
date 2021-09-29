@@ -11,8 +11,8 @@ import random
 import youtube_dl
 from discord.ext import commands
 from dotenv import load_dotenv
+from waifuim import WaifuAioClient
 from tinytag import TinyTag
-
 
 
 load_dotenv()
@@ -50,9 +50,12 @@ ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
 
 class Song:
-    def __init__(self, filename):
+    def __init__(self, filename, ctx):
         self.filename = filename
         self.time = datetime.timedelta(seconds=filename.data['duration'])
+        self.url = f'https://www.youtube.com/watch?v={filename.id}'
+        self.channel = filename.channel
+        self.req = ctx.author
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -60,7 +63,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
         super().__init__(source, volume)
         self.data = data
         self.title = data.get('title')
-        self.url = data.get('url')
+        self.id = data.get('id')
+        self.channel = data.get('uploader')
+        self.url = f'https://www.youtube.com/watch?v={self.id}'
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
@@ -69,7 +74,6 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if 'entries' in data:
             # take first item from a playlist
             data = data['entries'][0]
-
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
@@ -146,10 +150,9 @@ async def pisz(ctx):
 
 @bot.command()
 async def test(ctx):
-    embed_var = discord.Embed(title="Currently playing:", color=0x00ff00)
-    embed_var.add_field(name="1. Piosenka 1", value="_ _", inline=False)
-    embed_var.add_field(name="2. Piosenka 2", value="_ _", inline=False)
-    await ctx.send(embed=embed_var)
+    with open('queue.json') as file:
+        data = json.load(file)
+    print(data)
 
 
 @bot.command()
@@ -178,24 +181,18 @@ async def play(ctx, *, url):
             await join(ctx)
         async with ctx.typing():
             filename = await YTDLSource.from_url(url, loop=bot.loop)
-            if len(queue) == 0:
-                print('len == 0')
-                queue.append(Song(filename))
-                print(queue)
-                start_playing(ctx)
-                if url.startswith("https://") or url.startswith("http://"):
-                    await ctx.send(':musical_note: **Now Playing:** ``{}'.format(filename.title) + "``")
-                else:
-                    await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Now '
-                                                                               'Playing:** ``{}'.format(filename.title) + "``")
-            else:
-                queue.append(Song(filename))
-                print(queue)
-                if url.startswith("https://") or url.startswith("http://"):
-                    await ctx.send(':musical_note: **Added to queue:** ``{}'.format(filename.title) + "``")
-                else:
-                    await ctx.send(f':mag_right: **Searching for** ``' + url + '``\n:musical_note: **Added'
-                                                                               ' to queue:** ``{}'.format(filename.title) + "``")
+            queue.append(Song(filename, ctx))
+
+            embed = discord.Embed(colour=0x19a56f, url="https://discordapp.com", description=f"[{filename.title}]({filename.url})")
+            embed.set_thumbnail(url=f"https://img.youtube.com/vi/{filename.id}/maxresdefault.jpg")
+            embed.set_author(name="Added to queue", url="https://github.com/Wapirek/Discord-Tonari", icon_url=f"{ctx.author.avatar_url}")
+            embed.add_field(name="Channel", value=f"{filename.channel}", inline=True)
+            embed.add_field(name="Song Duration", value=f"{datetime.timedelta(seconds=filename.data['duration'])}", inline=True)
+            embed.add_field(name="Position in queue", value=f"{len(queue)}", inline=True)
+            await ctx.send(content=f':musical_note: **Searching** :mag_right: `{url}`', embed=embed)
+
+            start_playing(ctx)
+
     except discord.errors.ClientException:
         pass
     except discord.ext.commands.errors.MissingRequiredArgument:
@@ -205,8 +202,6 @@ async def play(ctx, *, url):
 
 def start_playing(ctx):
     print('poczatek grania')
-    player = ctx.voice_client
-
     ctx.voice_client.play(queue[0].filename, after=lambda a: next_song(ctx))
 
 
@@ -215,30 +210,37 @@ def next_song(ctx):
         queue.pop(0)
         start_playing(ctx)
     else:
-        queue.pop(0)
-        ctx.voice_client.stop()
+        try:
+            queue.pop(0)
+            ctx.voice_client.stop()
+        except IndexError:
+            pass
 
 
 @bot.command()
 async def stop(ctx):
     if not len(queue) == 0:
-        ctx.voice_client.stop()
         await ctx.send("The queue has been emptied, ``{}`` tracks have been removed.".format(len(queue)))
         queue.clear()
+        ctx.voice_client.stop()
     else:
         await ctx.send("Not currently playing anything.")
 
+#todo queue zawijanie po 5 + menu reakcjowe
 @bot.command()
 async def q(ctx):
     if not queue:
         await ctx.send('Not currently playing anything.')
     else:
-        i = 1
-        embed_var = discord.Embed(title="Currently playing:", color=0x19a56f)
-        for song in queue:
-            embed_var.add_field(name=str(i) + '. ' + song.filename.title, value=song.time, inline=False)
-            i += 1
-        await ctx.send(embed=embed_var)
+        i = 2
+        embed = discord.Embed(colour=discord.Colour(0xfd05c2), description=f"**[Queue for Obora](https://google.com)**")
+        embed.add_field(name="__Now Playing:__", value=f"[{queue[0].filename.title}]({queue[0].url}) | `{queue[0].time} Requested by: {queue[0].req}`", inline=False)
+        if len(queue) > 1:
+            embed.add_field(name="__Up Next:__", value=f"`1.` [{queue[1].filename.title}]({queue[1].url}) | `{queue[1].time} Requested by: {queue[1].req}`", inline=False)
+            for song in queue[2:]:
+                embed.add_field(name="\u200b", value=f"`{str(i)}.` [{queue[i].filename.title}]({queue[i].url}) | `{queue[i].time} Requested by: {queue[i].req}`", inline=False)
+                i += 1
+        await ctx.send(embed=embed)
 
 
 @bot.command()
@@ -255,16 +257,14 @@ async def pause(ctx):
 @bot.command()
 async def skip(ctx):
     ctx.voice_client.stop()
-    ctx.send("Skipped!")
+    await ctx.send("Skipped!")
 
 
 @bot.command()
 async def remove(ctx, id):
-    id = int(id) - 1
-    await ctx.send("`{}` has been removed from queue.".format(queue[id].filename.title))
-    if id == 0:
-        ctx.voice_client.stop()
-    else:
+    id = int(id)
+    if id > 0:
+        await ctx.send("`{}` has been removed from queue.".format(queue[id].filename.title))
         queue.pop(id)
 
 
@@ -277,6 +277,52 @@ async def resume(ctx):
     else:
         await ctx.send("The player is not paused.")
 
+def waifu_url(tag, gif):
+    typ = 'nsfw'
+    if tag == 'maid' or tag == 'waifu' or tag == 'all':
+        typ = 'sfw'
+    response = requests.get(f"https://api.waifu.im/{typ}/{tag}/?gif={gif}")
+    json_w = json.loads(response.text)
+    print(json_w)
+    if json_w['code'] == 404:
+        random_w = 'error'
+    else:
+        random_w = json_w['tags']['url']
+    print(random_w)
+    return random_w
 
+
+@bot.command()
+async def waifu(ctx, tag='waifu', gif=None):
+    if gif == 'gif':
+        gif = 'True'
+    else:
+        gif = 'False'
+    if tag == 'help':
+        embed = discord.Embed(title="Available tags:", colour=discord.Colour(0xbd10e0))
+        embed.add_field(name="SFW:", value="`all`\n`maid`", inline=False)
+        embed.add_field(name="NSFW:", value="`ass`\n`ecchi`\n`ero`\n`hentai`\n`maid`\n`milf`", inline=True)
+        embed.add_field(name="_ _", value="`oppai`\n`oral`\n`paizuri`\n`selfies`\n`uniform`", inline=True)
+        await ctx.send(embed=embed)
+        return
+
+    url = waifu_url(tag, gif)
+    if url == 'error':
+        await ctx.send(f"Sorry there is no image matching your criteria with the tag : {tag}. Please change the "
+                       f"criteria or consider changing your tag.")
+        return
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                await ctx.send('Could not download file...')
+            data = io.BytesIO(await resp.read())
+            if gif == 'True':
+                await ctx.send(file=discord.File(data, "waifu.gif"))
+            else:
+                await ctx.send(file=discord.File(data, "waifu.png"))
+            print('send waifu')
+
+#todo hentai request api updated (not working now)
 
 bot.run(os.getenv('TOKEN'))
