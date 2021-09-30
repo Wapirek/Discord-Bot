@@ -320,6 +320,5 @@ async def waifu(ctx, tag='waifu', gif=None):
             await ctx.send(file=discord.File(data, f"waifu{extension}"))
             print('send waifu')
 
-#todo hentai request api updated (not working now)
 
 bot.run(os.getenv('TOKEN'))
