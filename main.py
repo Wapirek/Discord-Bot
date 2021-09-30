@@ -18,7 +18,10 @@ load_dotenv()
 extension = ''
 
 client = discord.Client()
-bot = commands.Bot(command_prefix="!")
+bot = commands.Bot(command_prefix="$")
+
+t0 = 0
+t1 = 0
 
 gifs = []
 queue = []
@@ -49,15 +52,6 @@ ffmpeg_options = {
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
 
-class Song:
-    def __init__(self, filename, ctx):
-        self.filename = filename
-        self.time = datetime.timedelta(seconds=filename.data['duration'])
-        self.url = f'https://www.youtube.com/watch?v={filename.id}'
-        self.channel = filename.channel
-        self.req = ctx.author
-
-
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
         super().__init__(source, volume)
@@ -66,6 +60,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.id = data.get('id')
         self.channel = data.get('uploader')
         self.url = f'https://www.youtube.com/watch?v={self.id}'
+        self.time = datetime.timedelta(seconds=data.get('duration'))
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
@@ -76,6 +71,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = data['entries'][0]
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+
+
+class Song:
+    def __init__(self, filename, ctx):
+        self.filename = filename
+        self.time = filename.time
+        self.url = filename.url
+        self.channel = filename.channel
+        self.req = ctx.author
 
 
 def gif_update():
@@ -170,7 +174,7 @@ async def leave(ctx):
 
 
 @bot.command(pass_context=True, aliases=['plya', 'p'])
-async def play(ctx, *, url):
+async def play(ctx, *, url):    #todo brak returna jesli nie jestes na kanale
     try:
         if not ctx.voice_client:
             await join(ctx)
@@ -178,12 +182,26 @@ async def play(ctx, *, url):
             filename = await YTDLSource.from_url(url, loop=bot.loop)
             queue.append(Song(filename, ctx))
 
+            if len(queue) == 1:
+                time_until_play = 'Now'
+            else:
+                global t1
+                time_until_play = datetime.timedelta(0)
+                t1 = time.time()
+                seconds = round(t1 - t0)
+                time_left_current = queue[0].time - datetime.timedelta(seconds=seconds)
+                for song in queue[1:-1]:
+                    time_until_play += song.time
+                    print(song.time)
+                time_until_play += time_left_current
+
             embed = discord.Embed(colour=0x19a56f, url="https://discordapp.com", description=f"[{filename.title}]({filename.url})")
             embed.set_thumbnail(url=f"https://img.youtube.com/vi/{filename.id}/maxresdefault.jpg")
             embed.set_author(name="Added to queue", url="https://github.com/Wapirek/Discord-Tonari", icon_url=f"{ctx.author.avatar_url}")
             embed.add_field(name="Channel", value=f"{filename.channel}", inline=True)
-            embed.add_field(name="Song Duration", value=f"{datetime.timedelta(seconds=filename.data['duration'])}", inline=True)
-            embed.add_field(name="Position in queue", value=f"{len(queue)}", inline=True)
+            embed.add_field(name="Song Duration", value=f"{filename.time}", inline=True)
+            embed.add_field(name="Estimated time until playing", value=f"{time_until_play}", inline=True)
+            embed.add_field(name="Position in queue", value=f"{len(queue)-1}", inline=False)
             await ctx.send(content=f':musical_note: **Searching** :mag_right: `{url}`', embed=embed)
 
             start_playing(ctx)
@@ -196,8 +214,10 @@ async def play(ctx, *, url):
 
 
 def start_playing(ctx):
+    global t0
     print('poczatek grania')
     ctx.voice_client.play(queue[0].filename, after=lambda a: next_song(ctx))
+    t0 = time.time()
 
 
 def next_song(ctx):
@@ -228,9 +248,13 @@ async def q(ctx):
     if not queue:
         await ctx.send('Not currently playing anything.')
     else:
+        global t1
         i = 2
-        embed = discord.Embed(colour=discord.Colour(0xfd05c2), description=f"**[Queue for Obora](https://google.com)**")
-        embed.add_field(name="__Now Playing:__", value=f"[{queue[0].filename.title}]({queue[0].url}) | `{queue[0].time} Requested by: {queue[0].req}`", inline=False)
+        t1 = time.time()
+        seconds = t1 - t0
+        time_left = queue[0].time - datetime.timedelta(seconds=(round(seconds)))
+        embed = discord.Embed(colour=discord.Colour(0xfd05c2), description=f"**[Queue for {ctx.guild}](https://google.com)**")
+        embed.add_field(name="__Now Playing:__", value=f"[{queue[0].filename.title}]({queue[0].url}) | `{time_left} Requested by: {queue[0].req}`", inline=False)
         if len(queue) > 1:
             embed.add_field(name="__Up Next:__", value=f"`1.` [{queue[1].filename.title}]({queue[1].url}) | `{queue[1].time} Requested by: {queue[1].req}`", inline=False)
             for song in queue[2:]:
@@ -272,6 +296,7 @@ async def resume(ctx):
         await ctx.send("The player is now unpaused.")
     else:
         await ctx.send("The player is not paused.")
+
 
 def waifu_url(tag, gif):
     typ = 'nsfw'
@@ -321,4 +346,5 @@ async def waifu(ctx, tag='waifu', gif=None):
             print('send waifu')
 
 
-bot.run(os.getenv('TOKEN'))
+bot.run(os.getenv('TOKEN_DEV'))
+# bot.run(os.getenv('TOKEN'))
