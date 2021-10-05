@@ -12,12 +12,9 @@ import youtube_dl
 from discord.ext import commands
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
 extension = ''
 
-client = discord.Client()
 bot = commands.Bot(command_prefix="$")
 
 t0 = 0
@@ -30,10 +27,10 @@ youtube_dl.utils.bug_reports_message = lambda: ''
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }],
     'outtmpl': '%(title)s.mp3',
     'restrictfilenames': True,
     'noplaylist': True,
@@ -103,17 +100,24 @@ async def on_ready():
     print('online')
 
 
+# todo na razie nie działa (jest jakiś problem z discrod intents)
+
+# @bot.event
+# async def on_reaction_add(reaction, user):
+#     if not user.bot and reaction.message.content == "siema":
+#         await reaction.remove(user)
+#         print(reaction.emoji.name)
+#         print(reaction.emoji.id)
+#         emoji = await rea <------- # todo do dokończenia
+#         await reaction.message.add_reaction(':pepe_hmm:791088650535960586')
+
+
 @bot.command()
 async def pet(ctx, who: discord.Member):
     gif_update()
     await ctx.channel.purge(limit=1)
     await ctx.send(str(ctx.author.mention) + " pet " + str(who.mention) + " :heart:")
     await ctx.send(file=discord.File("gif/" + str(gifs[random.randint(0, len(gifs) - 1)])))
-
-
-@bot.command()
-async def gif_reload():
-    gif_update()
 
 
 @bot.command(aliases=['pjeski', 'pjes'])
@@ -148,19 +152,22 @@ async def pisz(ctx):
 
 
 @bot.command()
+@commands.has_any_role('ogul sie', 'Dziadu ak Head Admin')
 async def test(ctx):
-    with open('queue.json') as file:
-        data = json.load(file)
-    print(data)
+    # message = await ctx.send('siema')
+    # emoji = '\N{THUMBS UP SIGN}'
+    # await message.add_reaction(emoji)
+    print(ctx.message.author.voice.channel)
+    print(ctx.author.voice.channel)
 
 
 @bot.command()
 async def join(ctx):
-    if not ctx.message.author.voice:
-        await ctx.send("{} u must join a voice channel first!".format(ctx.message.author.mention))
+    if not ctx.author.voice:
+        await ctx.send(f"{ctx.author.mention} u must join a voice channel first!")
     else:
         channel = ctx.author.voice.channel
-        await ctx.send(f'Joining ``{channel}``')
+        await ctx.send(f'Joining {channel.mention}')
         await channel.connect()
 
 
@@ -174,37 +181,43 @@ async def leave(ctx):
 
 
 @bot.command(pass_context=True, aliases=['plya', 'p'])
-async def play(ctx, *, url):    #todo brak returna jesli nie jestes na kanale
+async def play(ctx, *, url):
     try:
+        print(ctx.message.author)
+        if not ctx.message.author.voice:
+            await ctx.send(f"{ctx.message.author.mention} u must join a voice channel first!")
+            return
         if not ctx.voice_client:
             await join(ctx)
-        async with ctx.typing():
-            filename = await YTDLSource.from_url(url, loop=bot.loop)
-            queue.append(Song(filename, ctx))
+        # async with ctx.typing():
+        filename = await YTDLSource.from_url(url, loop=bot.loop)
+        queue.append(Song(filename, ctx))
 
-            if len(queue) == 1:
-                time_until_play = 'Now'
-            else:
-                global t1
-                time_until_play = datetime.timedelta(0)
-                t1 = time.time()
-                seconds = round(t1 - t0)
-                time_left_current = queue[0].time - datetime.timedelta(seconds=seconds)
-                for song in queue[1:-1]:
-                    time_until_play += song.time
-                    print(song.time)
-                time_until_play += time_left_current
+        if len(queue) == 1:
+            time_until_play = 'Now'
+        else:
+            global t1
+            time_until_play = datetime.timedelta(0)
+            t1 = time.time()
+            seconds = round(t1 - t0)
+            time_left_current = queue[0].time - datetime.timedelta(seconds=seconds)
+            for song in queue[1:-1]:
+                time_until_play += song.time
+                print(song.time)
+            time_until_play += time_left_current
 
-            embed = discord.Embed(colour=0x19a56f, url="https://discordapp.com", description=f"[{filename.title}]({filename.url})")
-            embed.set_thumbnail(url=f"https://img.youtube.com/vi/{filename.id}/maxresdefault.jpg")
-            embed.set_author(name="Added to queue", url="https://github.com/Wapirek/Discord-Tonari", icon_url=f"{ctx.author.avatar_url}")
-            embed.add_field(name="Channel", value=f"{filename.channel}", inline=True)
-            embed.add_field(name="Song Duration", value=f"{filename.time}", inline=True)
-            embed.add_field(name="Estimated time until playing", value=f"{time_until_play}", inline=True)
-            embed.add_field(name="Position in queue", value=f"{len(queue)-1}", inline=False)
-            await ctx.send(content=f':musical_note: **Searching** :mag_right: `{url}`', embed=embed)
+        embed = discord.Embed(colour=0x19a56f, url="https://discordapp.com",
+                              description=f"[{filename.title}]({filename.url})")
+        embed.set_thumbnail(url=f"https://img.youtube.com/vi/{filename.id}/maxresdefault.jpg")
+        embed.set_author(name="Added to queue", url="https://github.com/Wapirek/Discord-Tonari",
+                         icon_url=f"{ctx.author.avatar_url}")
+        embed.add_field(name="Channel", value=f"{filename.channel}", inline=True)
+        embed.add_field(name="Song Duration", value=f"{filename.time}", inline=True)
+        embed.add_field(name="Estimated time until playing", value=f"{time_until_play}", inline=True)
+        embed.add_field(name="Position in queue", value=f"{len(queue) - 1}", inline=False)
+        await ctx.send(content=f':musical_note: **Searching** :mag_right: `{url}`', embed=embed)
 
-            start_playing(ctx)
+        start_playing(ctx)
 
     except discord.errors.ClientException:
         pass
@@ -235,14 +248,14 @@ def next_song(ctx):
 @bot.command()
 async def stop(ctx):
     if not len(queue) == 0:
-        await ctx.send("The queue has been emptied, ``{}`` tracks have been removed.".format(len(queue)))
+        await ctx.send(f"The queue has been emptied, ``{len(queue)}`` tracks have been removed.")
         queue.clear()
         ctx.voice_client.stop()
     else:
         await ctx.send("Not currently playing anything.")
 
 
-#todo queue zawijanie po 5 + menu reakcjowe
+# todo queue zawijanie po 5 + menu reakcjowe
 @bot.command(aliases=['queue'])
 async def q(ctx):
     if not queue:
@@ -253,12 +266,19 @@ async def q(ctx):
         t1 = time.time()
         seconds = t1 - t0
         time_left = queue[0].time - datetime.timedelta(seconds=(round(seconds)))
-        embed = discord.Embed(colour=discord.Colour(0xfd05c2), description=f"**[Queue for {ctx.guild}](https://google.com)**")
-        embed.add_field(name="__Now Playing:__", value=f"[{queue[0].filename.title}]({queue[0].url}) | `{time_left} Requested by: {queue[0].req}`", inline=False)
+        embed = discord.Embed(colour=discord.Colour(0xfd05c2),
+                              description=f"**[Queue for {ctx.guild}](https://google.com)**")
+        embed.add_field(name="__Now Playing:__",
+                        value=f"[{queue[0].filename.title}]({queue[0].url}) | `{time_left} Requested by: {queue[0].req}`",
+                        inline=False)
         if len(queue) > 1:
-            embed.add_field(name="__Up Next:__", value=f"`1.` [{queue[1].filename.title}]({queue[1].url}) | `{queue[1].time} Requested by: {queue[1].req}`", inline=False)
+            embed.add_field(name="__Up Next:__",
+                            value=f"`1.` [{queue[1].filename.title}]({queue[1].url}) | `{queue[1].time} Requested by: {queue[1].req}`",
+                            inline=False)
             for song in queue[2:]:
-                embed.add_field(name="\u200b", value=f"`{str(i)}.` [{queue[i].filename.title}]({queue[i].url}) | `{queue[i].time} Requested by: {queue[i].req}`", inline=False)
+                embed.add_field(name="\u200b",
+                                value=f"`{str(i)}.` [{queue[i].filename.title}]({queue[i].url}) | `{queue[i].time} Requested by: {queue[i].req}`",
+                                inline=False)
                 i += 1
         await ctx.send(embed=embed)
 
@@ -298,12 +318,7 @@ async def resume(ctx):
         await ctx.send("The player is not paused.")
 
 
-def waifu_url(tag, gif):
-    typ = 'nsfw'
-    if tag == 'maid' or tag == 'waifu' or tag == 'all':
-        typ = 'sfw'
-    if tag == 'maid_nsfw':
-        tag = 'maid'
+def waifu_url(tag, typ, gif):
     response = requests.get(f"https://api.waifu.im/{typ}/{tag}/?gif={gif}")
     json_w = json.loads(response.text)
     print(json_w)
@@ -318,11 +333,7 @@ def waifu_url(tag, gif):
 
 
 @bot.command()
-async def waifu(ctx, tag='waifu', gif=None):
-    if gif == 'gif':
-        gif = 'True'
-    else:
-        gif = 'False'
+async def waifu(ctx, tag='waifu', gif='False'):
     if tag == 'help':
         embed = discord.Embed(title="Available tags:", colour=discord.Colour(0xbd10e0))
         embed.add_field(name="SFW:", value="`all`\n`maid`", inline=False)
@@ -331,7 +342,20 @@ async def waifu(ctx, tag='waifu', gif=None):
         await ctx.send(embed=embed)
         return
 
-    url = waifu_url(tag, gif)
+    if gif == 'gif':
+        gif = 'True'
+
+    typ = 'nsfw'
+    if tag == 'maid' or tag == 'waifu' or tag == 'all':
+        typ = 'sfw'
+    if tag == 'maid_nsfw':
+        tag = 'maid'
+
+    if typ == 'nsfw' and not ctx.channel.is_nsfw():
+        await ctx.send(f'{ctx.channel.mention} is not tagged as NSFW!')
+        return
+
+    url = waifu_url(tag, typ, gif)
     if url == 'error':
         await ctx.send(f"Sorry there is no image matching your criteria with the tag : {tag}. Please change the "
                        f"criteria or consider changing your tag.")
@@ -346,5 +370,6 @@ async def waifu(ctx, tag='waifu', gif=None):
             print('send waifu')
 
 
+# todo przy mergowaniu do main zmienić
 bot.run(os.getenv('TOKEN_DEV'))
 # bot.run(os.getenv('TOKEN'))
