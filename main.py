@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 extension = ""
 
-command_prefix = "$"
+command_prefix = "!"
 bot = commands.Bot(command_prefix=command_prefix)
 
 time_left = 0.0
@@ -550,5 +550,5 @@ async def waifu(ctx, tag="waifu", gif=None):
 
 
 # todo przy mergowaniu do main zmienić
-bot.run(os.getenv("TOKEN_DEV"))
-# bot.run(os.getenv('TOKEN'))
+#bot.run(os.getenv("TOKEN_DEV"))
+bot.run(os.getenv('TOKEN'))
